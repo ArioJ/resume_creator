@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume Advisor - AI-Powered Resume Analysis</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>Resume Advisor</h1>
+            <p class="subtitle">AI-Powered Resume Analysis & Optimization</p>
+        </header>
+
+        <main class="main-content">
+            <div class="upload-section">
+                <div class="step-indicator">
+                    <div class="step active" data-step="1">
+                        <div class="step-number">1</div>
+                        <div class="step-label">Upload Resume</div>
+                    </div>
+                    <div class="step" data-step="2">
+                        <div class="step-number">2</div>
+                        <div class="step-label">Job Description</div>
+                    </div>
+                    <div class="step" data-step="3">
+                        <div class="step-number">3</div>
+                        <div class="step-label">Analyze</div>
+                    </div>
+                </div>
+
+                <!-- Step 1: Upload Resume -->
+                <div class="form-step active" id="step1">
+                    <h2>Upload Your Resume</h2>
+                    <p>Supported formats: PDF, DOCX, TXT (max 10MB)</p>
+                    
+                    <div class="upload-area" id="uploadArea">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <p class="upload-text">Drag & drop your resume here</p>
+                        <p class="upload-subtext">or</p>
+                        <button type="button" class="btn-secondary" id="browseBtn">Browse Files</button>
+                        <input type="file" id="fileInput" accept=".pdf,.docx,.txt" hidden>
+                    </div>
+                    
+                    <div class="file-info" id="fileInfo" style="display: none;">
+                        <div class="file-name" id="fileName"></div>
+                        <button type="button" class="btn-remove" id="removeFileBtn">Remove</button>
+                    </div>
+
+                    <button type="button" class="btn-primary" id="nextBtn1" disabled>Next: Job Description</button>
+                </div>
+
+                <!-- Step 2: Job Description -->
+                <div class="form-step" id="step2">
+                    <h2>Paste Job Description</h2>
+                    <p>Copy and paste the job description you're targeting</p>
+                    
+                    <textarea 
+                        id="jobDescription" 
+                        placeholder="Paste the full job description here, including requirements, responsibilities, and qualifications..."
+                        rows="12"
+                    ></textarea>
+                    
+                    <div class="char-count">
+                        <span id="charCount">0</span> characters (minimum 50)
+                    </div>
+
+                    <div class="button-group">
+                        <button type="button" class="btn-secondary" id="backBtn1">Back</button>
+                        <button type="button" class="btn-primary" id="nextBtn2" disabled>Next: Analyze</button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Analyze -->
+                <div class="form-step" id="step3">
+                    <h2>Ready to Analyze</h2>
+                    <p>Your resume will be analyzed against the job description across 9 key dimensions.</p>
+                    
+                    <div class="analysis-preview">
+                        <div class="preview-item">
+                            <strong>Resume:</strong> <span id="previewFileName"></span>
+                        </div>
+                        <div class="preview-item">
+                            <strong>Job Description:</strong> <span id="previewJobLength"></span> characters
+                        </div>
+                    </div>
+
+                    <div class="dimensions-info">
+                        <h3>Evaluation Dimensions:</h3>
+                        <ul class="dimensions-list">
+                            <li>Relevance of Experience</li>
+                            <li>Impact and Achievements</li>
+                            <li>Technical Proficiency</li>
+                            <li>Clarity and Structure</li>
+                            <li>Quantifiable Results</li>
+                            <li>Communication and Writing Quality</li>
+                            <li>Growth and Progression</li>
+                            <li>Innovation and Problem-Solving</li>
+                            <li>ATS Compatibility</li>
+                        </ul>
+                    </div>
+
+                    <div class="button-group">
+                        <button type="button" class="btn-secondary" id="backBtn2">Back</button>
+                        <button type="button" class="btn-primary" id="analyzeBtn">
+                            <span id="analyzeBtnText">Start Analysis</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Loading State -->
+                <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+                    <div class="loading-spinner"></div>
+                    <p class="loading-text">Analyzing your resume...</p>
+                    <p class="loading-subtext">This may take 30-60 seconds</p>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>Powered by OpenAI GPT-4 | Resume Advisor Platform</p>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
+

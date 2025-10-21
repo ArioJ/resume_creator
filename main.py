@@ -1,98 +1,74 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
-from PyPDF2 import PdfReader
-import docx2txt
-import io, tempfile, os, logging
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+import logging
 from pathlib import Path
-from uuid import uuid4
 
-app = FastAPI()
+# Import endpoint routers
+from endpoints.upload_resume import router as upload_router
+from endpoints.analyze_resume import router as analyze_router
+from endpoints.generate_report import router as report_router
 
+# Initialize FastAPI app
+app = FastAPI(
+    title="Resume Advisor Platform",
+    description="AI-powered resume analysis and optimization platform",
+    version="1.0.0"
+)
+
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# storage directory for extracted text files
-DATA_DIR = Path("data")
-DATA_DIR.mkdir(exist_ok=True)
+# Configure CORS for frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify exact origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Limit uploads to prevent DoS via very large files (10 MB default)
-MAX_UPLOAD_SIZE = 10 * 1024 * 1024
+# Register API routers
+app.include_router(upload_router, tags=["Upload"])
+app.include_router(analyze_router, tags=["Analysis"])
+app.include_router(report_router, tags=["Reports"])
 
+# Ensure frontend directory exists
+FRONTEND_DIR = Path("frontend")
+if FRONTEND_DIR.exists():
+    # Mount static files (CSS, JS)
+    app.mount("/static", StaticFiles(directory="frontend"), name="static")
 
-def extract_text_from_pdf(file_bytes: bytes) -> str:
-    reader = PdfReader(io.BytesIO(file_bytes))
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text() or ""
-    return text.strip()
+    # Serve index.html at root
+    @app.get("/", response_class=HTMLResponse)
+    async def serve_home():
+        index_path = FRONTEND_DIR / "index.html"
+        if index_path.exists():
+            return index_path.read_text(encoding="utf-8")
+        return "<h1>Resume Advisor Platform</h1><p>Frontend not found. Please check frontend folder.</p>"
 
-
-def extract_text_from_docx(file_bytes: bytes) -> str:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
-        tmp.write(file_bytes)
-        tmp_path = tmp.name
-    try:
-        text = docx2txt.process(tmp_path)
-        return text.strip()
-    finally:
-        try:
-            os.remove(tmp_path)
-        except Exception:
-            logger.exception("Failed to remove temp file %s", tmp_path)
-
-
-@app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    filename = (file.filename or "").lower()
-    file_bytes = await file.read()
-
-    # basic size guard
-    if len(file_bytes) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=413, detail=f"File too large (max {MAX_UPLOAD_SIZE} bytes)")
-
-    try:
-        if filename.endswith(".pdf"):
-            text = extract_text_from_pdf(file_bytes)
-        elif filename.endswith(".docx"):
-            text = extract_text_from_docx(file_bytes)
-        elif filename.endswith(".txt"):
-            text = file_bytes.decode("utf-8", errors="replace").strip()
-        else:
-            raise HTTPException(status_code=400, detail="Only PDF, DOCX and TXT are supported")
-    except HTTPException:
-        raise
-    except Exception:
-        logger.exception("Failed to extract text from uploaded file: %s", filename)
-        raise HTTPException(status_code=400, detail="Failed to extract text from file")
-
-    if not text:
-        raise HTTPException(status_code=400, detail="No extractable text found in the file")
-
-    # create unique ID for this file
-    doc_id = str(uuid4())
-    txt_path = DATA_DIR / f"{doc_id}.txt"
-
-    # save text to disk
-    with open(txt_path, "w", encoding="utf-8") as f:
-        f.write(text)
-
-    return JSONResponse({
-        "id": doc_id,
-        "filename": file.filename,
-        "num_chars": len(text),
-        "message": "File processed and stored successfully!"
-    })
+    # Serve dashboard.html
+    @app.get("/dashboard", response_class=HTMLResponse)
+    async def serve_dashboard():
+        dashboard_path = FRONTEND_DIR / "dashboard.html"
+        if dashboard_path.exists():
+            return dashboard_path.read_text(encoding="utf-8")
+        return "<h1>Dashboard not found</h1>"
+else:
+    logger.warning("Frontend directory not found. Only API endpoints will be available.")
+    
+    @app.get("/")
+    def root():
+        return {
+            "message": "Resume Advisor Platform API",
+            "docs": "/docs",
+            "status": "running"
+        }
 
 
-@app.get("/text/{doc_id}")
-async def get_text(doc_id: str):
-    txt_path = DATA_DIR / f"{doc_id}.txt"
-    if not txt_path.exists():
-        raise HTTPException(status_code=404, detail="Document not found")
-    text = txt_path.read_text(encoding="utf-8")
-    return {"id": doc_id, "text": text}
-
-
-@app.get("/")
-def root():
-    return {"message": "Server is alive! Go to /docs"}
+@app.get("/health")
+def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "service": "Resume Advisor Platform"}

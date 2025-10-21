@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Results - Resume Advisor</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="container dashboard">
+        <header class="header">
+            <h1>Resume Analysis Results</h1>
+            <button class="btn-secondary" id="newAnalysisBtn">Start New Analysis</button>
+        </header>
+
+        <main class="main-content">
+            <!-- Overall Score Section -->
+            <section class="score-section">
+                <div class="overall-score">
+                    <div class="score-label">Overall Fit Score</div>
+                    <div class="score-value" id="overallScore">--</div>
+                    <div class="score-gauge">
+                        <div class="gauge-fill" id="gaugeFill"></div>
+                    </div>
+                </div>
+                
+                <div class="executive-summary">
+                    <h3>Executive Summary</h3>
+                    <p id="executiveSummary">Loading...</p>
+                </div>
+            </section>
+
+            <!-- Download Report Button -->
+            <div class="report-actions">
+                <button class="btn-primary" id="downloadReportBtn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Download PDF Report
+                </button>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" data-tab="overview">Overview</button>
+                <button class="tab" data-tab="skills">Skills Analysis</button>
+                <button class="tab" data-tab="dimensions">Dimension Breakdown</button>
+                <button class="tab" data-tab="recommendations">Recommendations</button>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="tab-content">
+                <!-- Overview Tab -->
+                <div class="tab-panel active" id="overview">
+                    <div class="chart-container">
+                        <canvas id="radarChart"></canvas>
+                    </div>
+                    
+                    <div class="quick-stats">
+                        <div class="stat-card">
+                            <div class="stat-value" id="statOverlapping">--</div>
+                            <div class="stat-label">Matching Skills</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="statGaps">--</div>
+                            <div class="stat-label">Skill Gaps</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="statHighPriority">--</div>
+                            <div class="stat-label">High Priority Gaps</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Skills Analysis Tab -->
+                <div class="tab-panel" id="skills">
+                    <div class="skills-section">
+                        <h3 class="section-title">Overlapping Skills</h3>
+                        <div class="badges-container" id="overlappingSkills">
+                            <p class="empty-state">No overlapping skills found</p>
+                        </div>
+                    </div>
+                    
+                    <div class="skills-section">
+                        <h3 class="section-title">Skill Gaps</h3>
+                        <div id="skillGaps">
+                            <p class="empty-state">No skill gaps identified</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dimension Breakdown Tab -->
+                <div class="tab-panel" id="dimensions">
+                    <div id="dimensionCards"></div>
+                </div>
+
+                <!-- Recommendations Tab -->
+                <div class="tab-panel" id="recommendations">
+                    <div class="recommendations-content">
+                        <h3>Prioritized Action Items</h3>
+                        <p class="recommendations-intro">Based on your analysis, here are the key areas to focus on:</p>
+                        <div id="recommendationsList"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>Powered by OpenAI GPT-4 | Resume Advisor Platform</p>
+        </footer>
+    </div>
+
+    <script>
+        // Dashboard-specific JavaScript
+        const urlParams = new URLSearchParams(window.location.search);
+        const analysisId = urlParams.get('analysis_id');
+
+        if (!analysisId) {
+            alert('No analysis ID provided. Redirecting to home...');
+            window.location.href = '/';
+        } else {
+            loadAnalysisResults(analysisId);
+        }
+
+        function loadAnalysisResults(analysisId) {
+            fetch(`/api/analysis/${analysisId}`)
+                .then(response => {
+                    if (!response.ok) throw new Error('Analysis not found');
+                    return response.json();
+                })
+                .then(data => {
+                    displayResults(data.results);
+                    window.currentAnalysisId = analysisId;
+                })
+                .catch(error => {
+                    console.error('Error loading analysis:', error);
+                    alert('Failed to load analysis results. Please try again.');
+                    window.location.href = '/';
+                });
+        }
+
+        function displayResults(results) {
+            // Overall score
+            const overallScore = results.overall_score;
+            document.getElementById('overallScore').textContent = overallScore;
+            
+            // Color-code the score
+            const scoreElement = document.getElementById('overallScore');
+            if (overallScore >= 80) {
+                scoreElement.style.color = '#22c55e';
+            } else if (overallScore >= 60) {
+                scoreElement.style.color = '#eab308';
+            } else {
+                scoreElement.style.color = '#ef4444';
+            }
+            
+            // Gauge fill
+            const gaugeFill = document.getElementById('gaugeFill');
+            gaugeFill.style.width = `${overallScore}%`;
+            gaugeFill.style.backgroundColor = scoreElement.style.color;
+            
+            // Executive summary
+            document.getElementById('executiveSummary').textContent = results.executive_summary;
+            
+            // Quick stats
+            document.getElementById('statOverlapping').textContent = results.overlapping_skills.length;
+            document.getElementById('statGaps').textContent = results.skill_gaps.length;
+            const highPriorityGaps = results.skill_gaps.filter(g => g.importance === 'high').length;
+            document.getElementById('statHighPriority').textContent = highPriorityGaps;
+            
+            // Render radar chart
+            renderRadarChart(results.dimensions);
+            
+            // Render overlapping skills
+            renderOverlappingSkills(results.overlapping_skills);
+            
+            // Render skill gaps
+            renderSkillGaps(results.skill_gaps);
+            
+            // Render dimension cards
+            renderDimensionCards(results.dimensions);
+            
+            // Render recommendations
+            renderRecommendations(results.overall_recommendations);
+        }
+
+        function renderRadarChart(dimensions) {
+            const ctx = document.getElementById('radarChart').getContext('2d');
+            
+            const labels = Object.keys(dimensions);
+            const scores = labels.map(dim => dimensions[dim].score);
+            
+            new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Score',
+                        data: scores,
+                        backgroundColor: 'rgba(37, 99, 235, 0.2)',
+                        borderColor: 'rgba(37, 99, 235, 1)',
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgba(37, 99, 235, 1)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgba(37, 99, 235, 1)'
+                    }]
+                },
+                options: {
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                stepSize: 20
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderOverlappingSkills(skills) {
+            const container = document.getElementById('overlappingSkills');
+            
+            if (skills.length === 0) {
+                container.innerHTML = '<p class="empty-state">No overlapping skills found</p>';
+                return;
+            }
+            
+            container.innerHTML = skills.map(skill => 
+                `<span class="badge badge-success">${skill}</span>`
+            ).join('');
+        }
+
+        function renderSkillGaps(gaps) {
+            const container = document.getElementById('skillGaps');
+            
+            if (gaps.length === 0) {
+                container.innerHTML = '<p class="empty-state">No skill gaps identified</p>';
+                return;
+            }
+            
+            container.innerHTML = gaps.map(gap => `
+                <div class="gap-card gap-${gap.importance}">
+                    <div class="gap-header">
+                        <span class="gap-skill">${gap.skill}</span>
+                        <span class="gap-importance ${gap.importance}">${gap.importance.toUpperCase()}</span>
+                    </div>
+                    <p class="gap-suggestion">${gap.suggestion}</p>
+                </div>
+            `).join('');
+        }
+
+        function renderDimensionCards(dimensions) {
+            const container = document.getElementById('dimensionCards');
+            
+            container.innerHTML = Object.entries(dimensions).map(([name, data]) => {
+                const scoreClass = data.score >= 80 ? 'high' : data.score >= 60 ? 'medium' : 'low';
+                
+                return `
+                    <div class="dimension-card">
+                        <div class="dimension-header">
+                            <h3>${name}</h3>
+                            <span class="dimension-score score-${scoreClass}">${data.score}/100</span>
+                        </div>
+                        <div class="dimension-body">
+                            <h4>Analysis</h4>
+                            <p>${data.analysis}</p>
+                            
+                            <h4>Recommendations</h4>
+                            <ul class="recommendation-list">
+                                ${data.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderRecommendations(recommendations) {
+            const container = document.getElementById('recommendationsList');
+            
+            container.innerHTML = `
+                <ol class="recommendations-list">
+                    ${recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                </ol>
+            `;
+        }
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.tab;
+                
+                // Update active tab
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // Update active panel
+                document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+                document.getElementById(tabName).classList.add('active');
+            });
+        });
+
+        // Download report
+        document.getElementById('downloadReportBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('downloadReportBtn');
+            btn.disabled = true;
+            btn.textContent = 'Generating...';
+            
+            try {
+                // Generate report
+                const generateResponse = await fetch(`/api/generate-report/${window.currentAnalysisId}`, {
+                    method: 'POST'
+                });
+                
+                if (!generateResponse.ok) throw new Error('Failed to generate report');
+                
+                const result = await generateResponse.json();
+                
+                // Download the PDF
+                window.location.href = result.download_url;
+                
+                btn.textContent = 'Download PDF Report';
+                btn.disabled = false;
+            } catch (error) {
+                console.error('Error downloading report:', error);
+                alert('Failed to generate report. Please try again.');
+                btn.textContent = 'Download PDF Report';
+                btn.disabled = false;
+            }
+        });
+
+        // New analysis button
+        document.getElementById('newAnalysisBtn').addEventListener('click', () => {
+            window.location.href = '/';
+        });
+    </script>
+</body>
+</html>
+
