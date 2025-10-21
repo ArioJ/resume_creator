@@ -1,4 +1,4 @@
-import logging
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict
@@ -9,22 +9,30 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
 
-logger = logging.getLogger(__name__)
+# Import centralized logging
+from utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Ensure reports directory exists
 REPORTS_DIR = Path("reports")
 REPORTS_DIR.mkdir(exist_ok=True)
+logger.info(f"Reports directory initialized: {REPORTS_DIR.absolute()}")
 
 
 class PDFReportGenerator:
     """Generates professional PDF reports for resume analysis"""
     
     def __init__(self):
+        logger.info("Initializing PDFReportGenerator")
         self.styles = getSampleStyleSheet()
         self._setup_custom_styles()
+        logger.info("✓ PDFReportGenerator initialized with custom styles")
     
     def _setup_custom_styles(self):
         """Define custom styles for the PDF"""
+        logger.debug("Setting up custom PDF styles")
+        
         # Title style
         self.styles.add(ParagraphStyle(
             name='CustomTitle',
@@ -67,6 +75,8 @@ class PDFReportGenerator:
             alignment=TA_JUSTIFY,
             spaceAfter=8
         ))
+        
+        logger.debug("✓ Custom styles configured")
     
     def _get_score_color(self, score: float) -> colors.Color:
         """Return color based on score"""
@@ -276,10 +286,20 @@ class PDFReportGenerator:
         Returns:
             Path to generated PDF file
         """
+        logger.info("=" * 80)
+        logger.info("📄 GENERATING PDF REPORT")
+        logger.info("=" * 80)
+        logger.info(f"Report ID: {report_id}")
+        logger.info(f"Overall Score: {analysis.get('overall_score', 'N/A')}")
+        
+        start_time = time.time()
+        
         try:
             pdf_path = REPORTS_DIR / f"{report_id}.pdf"
+            logger.debug(f"PDF will be saved to: {pdf_path.absolute()}")
             
             # Create PDF document
+            logger.debug("Creating PDF document structure")
             doc = SimpleDocTemplate(
                 str(pdf_path),
                 pagesize=letter,
@@ -292,20 +312,50 @@ class PDFReportGenerator:
             # Build content
             elements = []
             
-            # Add all sections
+            logger.debug("Building cover page...")
             elements.extend(self._create_cover_page(analysis))
+            
+            logger.debug("Building dimension scores table...")
             elements.extend(self._create_dimension_scores_table(analysis))
+            
+            logger.debug("Building skills section...")
             elements.extend(self._create_skills_section(analysis))
+            
+            logger.debug("Building dimension details...")
             elements.extend(self._create_dimension_details(analysis))
+            
+            logger.debug("Building recommendations section...")
             elements.extend(self._create_recommendations_section(analysis))
             
+            logger.info(f"Total elements to render: {len(elements)}")
+            
             # Build PDF
+            logger.debug("Rendering PDF...")
             doc.build(elements)
             
-            logger.info(f"PDF report generated: {pdf_path}")
+            # Get file size
+            file_size_kb = pdf_path.stat().st_size / 1024
+            
+            duration = time.time() - start_time
+            logger.info("=" * 80)
+            logger.info("✅ PDF REPORT GENERATED SUCCESSFULLY")
+            logger.info("=" * 80)
+            logger.info(f"File path: {pdf_path}")
+            logger.info(f"File size: {file_size_kb:.2f} KB")
+            logger.info(f"Duration: {duration:.2f}s")
+            logger.info("=" * 80)
+            
             return pdf_path
         
         except Exception as e:
-            logger.error(f"Failed to generate PDF report: {e}")
+            duration = time.time() - start_time
+            logger.error("=" * 80)
+            logger.error("❌ PDF REPORT GENERATION FAILED")
+            logger.error("=" * 80)
+            logger.error(f"Report ID: {report_id}")
+            logger.error(f"Error: {str(e)}")
+            logger.error(f"Duration before failure: {duration:.2f}s")
+            logger.error("=" * 80)
+            logger.error("Full error details:", exc_info=True)
             raise
 
