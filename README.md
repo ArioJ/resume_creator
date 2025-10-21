@@ -131,11 +131,3 @@ There's at least one test in `tests/test_upload_txt.py` that posts a small `.txt
 
 - If `docx2txt` or `PyPDF2` raise errors, inspect the server logs (stdout) for stack traces. Ensure dependencies are installed in the active venv.
 - If PowerShell refuses to activate the venv, check the execution policy (`Get-ExecutionPolicy`) and consider running: `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`.
-
-## License
-
-This repository contains example code. Adjust and reuse as you like.
-
----
-
-If you'd like, I can also add example `.env` configuration, a small Postman collection, or expand tests to cover PDF/DOCX uploads. Which would you prefer next?
