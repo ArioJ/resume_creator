@@ -4,6 +4,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import tiktoken
 from typing import Optional
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -19,18 +20,29 @@ class OpenAIClient:
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not found in environment variables")
         
-        # Initialize OpenAI client with explicit parameters only
-        # This avoids issues with proxy settings or unexpected kwargs
+        # Create custom httpx client with proxies disabled
+        # This prevents proxy-related errors
         try:
+            custom_http_client = httpx.Client(
+                timeout=60.0,
+                trust_env=False  # Disable reading proxy from environment
+            )
+            
             self.client = OpenAI(
                 api_key=self.api_key,
-                timeout=60.0,
+                http_client=custom_http_client,
                 max_retries=2
             )
+            logger.info("OpenAI client initialized with custom HTTP client (proxies disabled)")
         except Exception as e:
-            logger.error(f"Failed to initialize OpenAI client: {e}")
-            # Fallback to minimal initialization
-            self.client = OpenAI(api_key=self.api_key)
+            logger.error(f"Failed to initialize OpenAI client with custom HTTP client: {e}")
+            # Last resort fallback - try without any custom settings
+            try:
+                self.client = OpenAI(api_key=self.api_key)
+                logger.info("OpenAI client initialized with default settings")
+            except Exception as e2:
+                logger.error(f"Failed to initialize OpenAI client: {e2}")
+                raise
         
         self.model = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
         self.max_tokens = int(os.getenv("MAX_TOKENS", "4000"))
