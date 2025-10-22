@@ -31,7 +31,7 @@
                 </div>
             </section>
 
-            <!-- Download Report Button -->
+            <!-- Action Buttons -->
             <div class="report-actions">
                 <button class="btn-primary" id="downloadReportBtn">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -41,6 +41,40 @@
                     </svg>
                     Download PDF Report
                 </button>
+                
+                <button class="btn-secondary" id="generateOptimizedResumeBtn" style="margin-left: 12px;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                    Generate Optimized Resume
+                </button>
+            </div>
+            
+            <!-- Optimized Resume Display (initially hidden) -->
+            <div id="optimizedResumeSection" style="display: none; margin-top: 30px;">
+                <div style="background: #f8fafc; border: 2px solid #2563eb; border-radius: 8px; padding: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="margin: 0; color: #1e40af;">✨ Your Optimized Resume</h3>
+                        <button class="btn-primary" id="downloadOptimizedResumeBtn" style="font-size: 14px; padding: 8px 16px;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 4px;">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Download
+                        </button>
+                    </div>
+                    <p style="color: #475569; margin-bottom: 15px; font-size: 14px;">
+                        This resume has been optimized to align with the job description while maintaining authenticity.
+                    </p>
+                    <div style="background: white; border-radius: 6px; padding: 15px; max-height: 400px; overflow-y: auto;">
+                        <pre id="optimizedResumeContent" style="white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.5; margin: 0;"></pre>
+                    </div>
+                </div>
             </div>
 
             <!-- Tabs -->
@@ -343,6 +377,67 @@
         // New analysis button
         document.getElementById('newAnalysisBtn').addEventListener('click', () => {
             window.location.href = '/';
+        });
+
+        // Generate optimized resume
+        document.getElementById('generateOptimizedResumeBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('generateOptimizedResumeBtn');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span style="display: inline-flex; align-items: center;">Generating... ⏳</span>';
+            
+            try {
+                // Generate optimized resume
+                const response = await fetch('/api/generate-optimized-resume', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        analysis_id: window.currentAnalysisId
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to generate optimized resume');
+                }
+                
+                const result = await response.json();
+                
+                // Display the optimized resume
+                document.getElementById('optimizedResumeContent').textContent = result.optimized_resume;
+                document.getElementById('optimizedResumeSection').style.display = 'block';
+                
+                // Store download URL for later
+                window.optimizedResumeDownloadUrl = result.download_url;
+                
+                // Scroll to the optimized resume section
+                document.getElementById('optimizedResumeSection').scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'nearest' 
+                });
+                
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                
+                // Show success message
+                alert('✨ Optimized resume generated successfully! You can now review and download it.');
+            } catch (error) {
+                console.error('Error generating optimized resume:', error);
+                alert('Failed to generate optimized resume: ' + error.message);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        });
+
+        // Download optimized resume
+        document.getElementById('downloadOptimizedResumeBtn').addEventListener('click', () => {
+            if (window.optimizedResumeDownloadUrl) {
+                window.location.href = window.optimizedResumeDownloadUrl;
+            } else {
+                alert('Please generate the optimized resume first.');
+            }
         });
     </script>
 </body>

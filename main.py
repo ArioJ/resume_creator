@@ -12,6 +12,7 @@ from utils.logging_config import get_logger, log_api_request
 from endpoints.upload_resume import router as upload_router
 from endpoints.analyze_resume import router as analyze_router
 from endpoints.generate_report import router as report_router
+from endpoints.generate_optimized_resume import router as optimize_router
 
 # Get logger for this module
 logger = get_logger(__name__)
@@ -89,6 +90,8 @@ app.include_router(analyze_router, tags=["Analysis"])
 logger.info("✓ Analysis router registered")
 app.include_router(report_router, tags=["Reports"])
 logger.info("✓ Report router registered")
+app.include_router(optimize_router, tags=["Resume Optimization"])
+logger.info("✓ Resume optimization router registered")
 
 # Ensure frontend directory exists
 FRONTEND_DIR = Path("frontend")
