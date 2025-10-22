@@ -33,48 +33,50 @@ class PDFReportGenerator:
         """Define custom styles for the PDF"""
         logger.debug("Setting up custom PDF styles")
         
-        # Title style
-        self.styles.add(ParagraphStyle(
-            name='CustomTitle',
-            parent=self.styles['Heading1'],
-            fontSize=24,
-            textColor=colors.HexColor('#1a365d'),
-            spaceAfter=30,
-            alignment=TA_CENTER,
-            fontName='Helvetica-Bold'
-        ))
+        # Check and add custom styles only if they don't exist
+        if 'CustomTitle' not in self.styles:
+            self.styles.add(ParagraphStyle(
+                name='CustomTitle',
+                parent=self.styles['Heading1'],
+                fontSize=24,
+                textColor=colors.HexColor('#1a365d'),
+                spaceAfter=30,
+                alignment=TA_CENTER,
+                fontName='Helvetica-Bold'
+            ))
         
-        # Score style
-        self.styles.add(ParagraphStyle(
-            name='ScoreStyle',
-            parent=self.styles['Normal'],
-            fontSize=48,
-            textColor=colors.HexColor('#2c5282'),
-            spaceAfter=10,
-            alignment=TA_CENTER,
-            fontName='Helvetica-Bold'
-        ))
+        if 'ScoreStyle' not in self.styles:
+            self.styles.add(ParagraphStyle(
+                name='ScoreStyle',
+                parent=self.styles['Normal'],
+                fontSize=48,
+                textColor=colors.HexColor('#2c5282'),
+                spaceAfter=10,
+                alignment=TA_CENTER,
+                fontName='Helvetica-Bold'
+            ))
         
-        # Section heading style
-        self.styles.add(ParagraphStyle(
-            name='SectionHeading',
-            parent=self.styles['Heading2'],
-            fontSize=16,
-            textColor=colors.HexColor('#2c5282'),
-            spaceAfter=12,
-            spaceBefore=16,
-            fontName='Helvetica-Bold'
-        ))
+        if 'SectionHeading' not in self.styles:
+            self.styles.add(ParagraphStyle(
+                name='SectionHeading',
+                parent=self.styles['Heading2'],
+                fontSize=16,
+                textColor=colors.HexColor('#2c5282'),
+                spaceAfter=12,
+                spaceBefore=16,
+                fontName='Helvetica-Bold'
+            ))
         
-        # Body style
-        self.styles.add(ParagraphStyle(
-            name='BodyText',
-            parent=self.styles['Normal'],
-            fontSize=11,
-            leading=16,
-            alignment=TA_JUSTIFY,
-            spaceAfter=8
-        ))
+        # Use a unique name to avoid conflicts with built-in styles
+        if 'CustomBodyText' not in self.styles:
+            self.styles.add(ParagraphStyle(
+                name='CustomBodyText',
+                parent=self.styles['Normal'],
+                fontSize=11,
+                leading=16,
+                alignment=TA_JUSTIFY,
+                spaceAfter=8
+            ))
         
         logger.debug("✓ Custom styles configured")
     
@@ -115,7 +117,7 @@ class PDFReportGenerator:
         
         # Executive summary
         elements.append(Paragraph("Executive Summary", self.styles['SectionHeading']))
-        summary = Paragraph(analysis['executive_summary'], self.styles['BodyText'])
+        summary = Paragraph(analysis['executive_summary'], self.styles['CustomBodyText'])
         elements.append(summary)
         elements.append(Spacer(1, 0.3 * inch))
         
@@ -135,20 +137,37 @@ class PDFReportGenerator:
         elements.append(Paragraph("Dimension Scores", self.styles['SectionHeading']))
         elements.append(Spacer(1, 0.1 * inch))
         
-        # Prepare table data
-        table_data = [['Dimension', 'Score', 'Weight']]
+        # Create style for table cells
+        cell_style = ParagraphStyle(
+            name='DimensionCell',
+            parent=self.styles['Normal'],
+            fontSize=10,
+            leading=12,
+            alignment=TA_LEFT
+        )
+        
+        # Prepare table data with Paragraphs for text wrapping
+        table_data = [[
+            Paragraph('<b>Dimension</b>', cell_style),
+            Paragraph('<b>Score</b>', cell_style),
+            Paragraph('<b>Weight</b>', cell_style)
+        ]]
         
         for dim in analysis['dimensions'].keys():
             score = analysis['dimensions'][dim]['score']
             weight = analysis['dimension_weights'][dim]
             table_data.append([
-                dim,
-                f"{score}/100",
-                f"{weight * 100:.0f}%"
+                Paragraph(dim, cell_style),
+                Paragraph(f"{score}/100", cell_style),
+                Paragraph(f"{weight * 100:.0f}%", cell_style)
             ])
         
         # Add overall score
-        table_data.append(['Overall Score', f"{analysis['overall_score']}/100", '100%'])
+        table_data.append([
+            Paragraph('<b>Overall Score</b>', cell_style),
+            Paragraph(f"<b>{analysis['overall_score']}/100</b>", cell_style),
+            Paragraph('<b>100%</b>', cell_style)
+        ])
         
         # Create table
         table = Table(table_data, colWidths=[3.5 * inch, 1.2 * inch, 1 * inch])
@@ -157,11 +176,14 @@ class PDFReportGenerator:
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 12),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('TOPPADDING', (0, 0), (-1, -1), 6),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
             ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#e2e8f0')),
-            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
             ('GRID', (0, 0), (-1, -1), 1, colors.grey),
             ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f8fafc')]),
         ]))
@@ -182,10 +204,10 @@ class PDFReportGenerator:
         elements.append(Paragraph("Overlapping Skills", self.styles['Heading3']))
         if analysis['overlapping_skills']:
             skills_text = ", ".join(analysis['overlapping_skills'])
-            skills_para = Paragraph(f"<b>Matching skills found:</b> {skills_text}", self.styles['BodyText'])
+            skills_para = Paragraph(f"<b>Matching skills found:</b> {skills_text}", self.styles['CustomBodyText'])
             elements.append(skills_para)
         else:
-            elements.append(Paragraph("No clear overlapping skills identified.", self.styles['BodyText']))
+            elements.append(Paragraph("No clear overlapping skills identified.", self.styles['CustomBodyText']))
         
         elements.append(Spacer(1, 0.2 * inch))
         
@@ -193,30 +215,49 @@ class PDFReportGenerator:
         elements.append(Paragraph("Skill Gaps", self.styles['Heading3']))
         
         if analysis['skill_gaps']:
-            gap_data = [['Skill', 'Importance', 'Suggestion']]
+            # Create a compact style for table cells
+            cell_style = ParagraphStyle(
+                name='TableCell',
+                parent=self.styles['Normal'],
+                fontSize=9,
+                leading=11,
+                alignment=TA_LEFT
+            )
             
+            # Header row
+            gap_data = [[
+                Paragraph('<b>Skill</b>', cell_style),
+                Paragraph('<b>Importance</b>', cell_style),
+                Paragraph('<b>Suggestion</b>', cell_style)
+            ]]
+            
+            # Data rows - wrap each cell content in Paragraph for text wrapping
             for gap in analysis['skill_gaps']:
                 gap_data.append([
-                    gap.get('skill', 'N/A'),
-                    gap.get('importance', 'N/A').upper(),
-                    gap.get('suggestion', 'N/A')
+                    Paragraph(gap.get('skill', 'N/A'), cell_style),
+                    Paragraph(gap.get('importance', 'N/A').upper(), cell_style),
+                    Paragraph(gap.get('suggestion', 'N/A'), cell_style)
                 ])
             
-            gap_table = Table(gap_data, colWidths=[1.5 * inch, 1 * inch, 4.2 * inch])
+            gap_table = Table(gap_data, colWidths=[2.2 * inch, 0.8 * inch, 3.7 * inch])
             gap_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#dc2626')),
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 11),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
                 ('GRID', (0, 0), (-1, -1), 1, colors.grey),
                 ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#fef2f2')]),
             ]))
             
             elements.append(gap_table)
         else:
-            elements.append(Paragraph("No significant skill gaps identified.", self.styles['BodyText']))
+            elements.append(Paragraph("No significant skill gaps identified.", self.styles['CustomBodyText']))
         
         elements.append(PageBreak())
         return elements
@@ -238,7 +279,7 @@ class PDFReportGenerator:
             
             # Analysis
             elements.append(Paragraph("<b>Analysis:</b>", self.styles['Normal']))
-            analysis_para = Paragraph(data['analysis'], self.styles['BodyText'])
+            analysis_para = Paragraph(data['analysis'], self.styles['CustomBodyText'])
             elements.append(analysis_para)
             
             # Recommendations
@@ -246,7 +287,7 @@ class PDFReportGenerator:
             elements.append(Paragraph("<b>Recommendations:</b>", self.styles['Normal']))
             
             for i, rec in enumerate(data['recommendations'], 1):
-                rec_para = Paragraph(f"{i}. {rec}", self.styles['BodyText'])
+                rec_para = Paragraph(f"{i}. {rec}", self.styles['CustomBodyText'])
                 elements.append(rec_para)
             
             elements.append(Spacer(1, 0.2 * inch))
@@ -263,13 +304,13 @@ class PDFReportGenerator:
         
         intro = Paragraph(
             "Based on the comprehensive analysis, here are the prioritized actions to improve your resume:",
-            self.styles['BodyText']
+            self.styles['CustomBodyText']
         )
         elements.append(intro)
         elements.append(Spacer(1, 0.1 * inch))
         
         for i, rec in enumerate(analysis['overall_recommendations'], 1):
-            rec_para = Paragraph(f"{i}. {rec}", self.styles['BodyText'])
+            rec_para = Paragraph(f"{i}. {rec}", self.styles['CustomBodyText'])
             elements.append(rec_para)
             elements.append(Spacer(1, 0.05 * inch))
         
