@@ -124,17 +124,51 @@ CRITICAL RULES:
 7. Ensure the tone and language match the industry standards of the target role
 
 **FORMAT:**
-Provide the optimized resume in a clean, professional format suitable for ATS systems. Include:
-- Contact information (if present in original)
-- Professional summary (optimized to match the role)
-- Work experience (reorganized to emphasize relevant roles)
-- Education (as is from original)
-- Skills (reorganized to prioritize relevant ones)
-- Certifications/Projects (if present and relevant)
+Provide the optimized resume in **Markdown format**. Use the following structure:
+
+```markdown
+# [Candidate Name]
+
+[Contact Information]
+
+## Professional Summary
+[Compelling 2-3 sentence summary optimized for the role]
+
+## Work Experience
+
+### [Job Title] | [Company Name]
+*[Start Date] - [End Date]*
+
+- [Achievement/responsibility using relevant keywords]
+- [Achievement/responsibility highlighting transferable skills]
+- [Continue with bullet points]
+
+### [Next Job Title] | [Company Name]
+*[Start Date] - [End Date]*
+...
+
+## Skills
+
+**Technical Skills:** [List relevant technical skills]
+**Tools & Technologies:** [List tools and technologies]
+**Soft Skills:** [List relevant soft skills]
+
+## Education
+
+**[Degree]** | [Institution Name]
+*[Graduation Date]*
+[Relevant details]
+
+## Certifications
+[If present and relevant]
+
+## Projects
+[If present and relevant]
+```
 
 **REMEMBER:** The resume must be 100% truthful and based ONLY on information present in the original resume. Your goal is to present the candidate's real experience in the most compelling way for this specific role.
 
-Generate the optimized resume now:"""
+Generate the optimized resume in Markdown format now:"""
         
         return prompt
 

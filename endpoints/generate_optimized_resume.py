@@ -149,18 +149,20 @@ async def generate_optimized_resume(request: OptimizeRequest):
 @router.get("/api/download-optimized-resume/{analysis_id}")
 async def download_optimized_resume(analysis_id: str):
     """
-    Download optimized resume as text file
+    Download optimized resume as PDF (converted from Markdown)
     
     Args:
         analysis_id: ID of the analysis
     
     Returns:
-        Text file download
+        PDF file download
     """
     from fastapi.responses import FileResponse
+    from utils.markdown_to_pdf import get_markdown_converter
     
-    logger.info(f"📥 Download request for optimized resume: {analysis_id}")
+    logger.info(f"📥 Download request for optimized resume PDF: {analysis_id}")
     
+    # Check if markdown resume exists
     optimized_path = OPTIMIZED_DIR / f"{analysis_id}.txt"
     
     if not optimized_path.exists():
@@ -170,12 +172,30 @@ async def download_optimized_resume(analysis_id: str):
             detail="Optimized resume not found. Please generate it first."
         )
     
-    file_size_kb = optimized_path.stat().st_size / 1024
-    logger.info(f"✓ Serving optimized resume: {analysis_id} ({file_size_kb:.2f} KB)")
+    try:
+        # Read the markdown content
+        logger.debug(f"Reading markdown from: {optimized_path}")
+        with open(optimized_path, "r", encoding="utf-8") as f:
+            markdown_content = f.read()
+        
+        # Convert to PDF
+        logger.info("Converting markdown to PDF...")
+        converter = get_markdown_converter()
+        pdf_path = converter.convert_to_pdf(markdown_content, f"optimized_resume_{analysis_id}")
+        
+        file_size_kb = pdf_path.stat().st_size / 1024
+        logger.info(f"✓ Serving optimized resume PDF: {analysis_id} ({file_size_kb:.2f} KB)")
+        
+        return FileResponse(
+            path=str(pdf_path),
+            filename=f"optimized_resume_{analysis_id}.pdf",
+            media_type="application/pdf"
+        )
     
-    return FileResponse(
-        path=str(optimized_path),
-        filename=f"optimized_resume_{analysis_id}.txt",
-        media_type="text/plain"
-    )
+    except Exception as e:
+        logger.error(f"Failed to generate PDF: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate PDF: {str(e)}"
+        )
 

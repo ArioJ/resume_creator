@@ -6,6 +6,57 @@
     <title>Analysis Results - Resume Advisor</title>
     <link rel="stylesheet" href="/static/styles.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.0.0/marked.min.js"></script>
+    <style>
+        /* Markdown styling for optimized resume */
+        #optimizedResumeContent h1 {
+            font-size: 24px;
+            color: #1a365d;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        #optimizedResumeContent h2 {
+            font-size: 16px;
+            color: #2563eb;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 4px;
+        }
+        #optimizedResumeContent h3 {
+            font-size: 14px;
+            color: #1e40af;
+            margin-top: 15px;
+            margin-bottom: 5px;
+        }
+        #optimizedResumeContent ul {
+            margin: 5px 0;
+            padding-left: 25px;
+        }
+        #optimizedResumeContent li {
+            margin: 4px 0;
+            line-height: 1.5;
+        }
+        #optimizedResumeContent p {
+            margin: 8px 0;
+            line-height: 1.6;
+        }
+        #optimizedResumeContent em {
+            color: #475569;
+            font-style: italic;
+        }
+        #optimizedResumeContent strong {
+            color: #1e293b;
+            font-weight: 600;
+        }
+        #optimizedResumeContent code {
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+    </style>
 </head>
 <body>
     <div class="container dashboard">
@@ -65,14 +116,14 @@
                                 <polyline points="7 10 12 15 17 10"></polyline>
                                 <line x1="12" y1="15" x2="12" y2="3"></line>
                             </svg>
-                            Download
+                            Download PDF
                         </button>
                     </div>
                     <p style="color: #475569; margin-bottom: 15px; font-size: 14px;">
                         This resume has been optimized to align with the job description while maintaining authenticity.
                     </p>
-                    <div style="background: white; border-radius: 6px; padding: 15px; max-height: 400px; overflow-y: auto;">
-                        <pre id="optimizedResumeContent" style="white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 13px; line-height: 1.5; margin: 0;"></pre>
+                    <div style="background: white; border-radius: 6px; padding: 20px; max-height: 500px; overflow-y: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                        <div id="optimizedResumeContent" style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;"></div>
                     </div>
                 </div>
             </div>
@@ -405,8 +456,10 @@
                 
                 const result = await response.json();
                 
-                // Display the optimized resume
-                document.getElementById('optimizedResumeContent').textContent = result.optimized_resume;
+                // Display the optimized resume - render markdown
+                const markdownContent = result.optimized_resume;
+                const htmlContent = marked.parse(markdownContent);
+                document.getElementById('optimizedResumeContent').innerHTML = htmlContent;
                 document.getElementById('optimizedResumeSection').style.display = 'block';
                 
                 // Store download URL for later
