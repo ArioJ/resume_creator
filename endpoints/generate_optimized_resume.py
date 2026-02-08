@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from pathlib import Path
 import json
@@ -7,6 +8,9 @@ import time
 # Import centralized logging
 from utils.logging_config import get_logger, log_api_request
 from utils.resume_generator import ResumeGenerator
+
+# Import database
+from utils.database import get_db, Resume, Analysis, OptimizedResume, Report
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -26,7 +30,7 @@ class OptimizeRequest(BaseModel):
 
 
 @router.post("/api/generate-optimized-resume")
-async def generate_optimized_resume(request: OptimizeRequest):
+async def generate_optimized_resume(request: OptimizeRequest, db: Session = Depends(get_db)):
     """
     Generate an optimized resume tailored to the job description
     
@@ -44,34 +48,29 @@ async def generate_optimized_resume(request: OptimizeRequest):
     logger.info(f"Analysis ID: {request.analysis_id}")
     
     try:
-        # Load analysis data to get job description and resume_id
-        analysis_path = ANALYSIS_DIR / f"{request.analysis_id}.json"
+        # Load analysis from database
+        logger.debug(f"Looking for analysis in database: {request.analysis_id}")
+        analysis = db.query(Analysis).filter(Analysis.id == request.analysis_id).first()
         
-        if not analysis_path.exists():
+        if not analysis:
             logger.warning(f"Analysis not found: {request.analysis_id}")
             raise HTTPException(status_code=404, detail="Analysis not found")
         
-        logger.debug(f"Loading analysis from: {analysis_path}")
-        with open(analysis_path, "r", encoding="utf-8") as f:
-            analysis_data = json.load(f)
-        
-        resume_id = analysis_data.get("resume_id")
-        job_description = analysis_data.get("job_description")
+        resume_id = analysis.resume_id
+        job_description = analysis.job_description
         
         logger.info(f"Resume ID: {resume_id}")
         logger.info(f"Job description length: {len(job_description)} chars")
         
-        # Load original resume text
-        resume_path = DATA_DIR / f"{resume_id}.txt"
+        # Load original resume from database
+        logger.debug(f"Looking for resume in database: {resume_id}")
+        resume = db.query(Resume).filter(Resume.id == resume_id).first()
         
-        if not resume_path.exists():
-            logger.warning(f"Resume file not found: {resume_id}")
+        if not resume:
+            logger.warning(f"Resume not found: {resume_id}")
             raise HTTPException(status_code=404, detail="Original resume not found")
         
-        logger.debug(f"Loading resume from: {resume_path}")
-        with open(resume_path, "r", encoding="utf-8") as f:
-            resume_text = f.read()
-        
+        resume_text = resume.content
         logger.info(f"Original resume length: {len(resume_text)} chars")
         
         # Generate optimized resume
@@ -79,16 +78,43 @@ async def generate_optimized_resume(request: OptimizeRequest):
         generator = ResumeGenerator()
         
         logger.info("Generating optimized resume...")
-        optimized_resume = generator.generate_optimized_resume(resume_text, job_description)
+        optimized_resume_text = generator.generate_optimized_resume(resume_text, job_description)
         
-        # Save optimized resume
+        # Save optimized resume to database
+        logger.info("Saving optimized resume to database...")
+        
+        # Check if optimized resume already exists
+        existing_optimized = db.query(OptimizedResume).filter(
+            OptimizedResume.analysis_id == request.analysis_id
+        ).first()
+        
+        if existing_optimized:
+            existing_optimized.content = optimized_resume_text
+            logger.info("Updated existing optimized resume")
+        else:
+            from uuid import uuid4
+            optimized_resume = OptimizedResume(
+                id=str(uuid4()),
+                analysis_id=request.analysis_id,
+                content=optimized_resume_text,
+                format="markdown"
+            )
+            db.add(optimized_resume)
+            logger.info("Created new optimized resume")
+        
+        db.commit()
+        logger.info("✓ Optimized resume saved to database")
+        
+        # Also save to disk for backward compatibility (optional)
         optimized_path = OPTIMIZED_DIR / f"{request.analysis_id}.txt"
-        logger.debug(f"Saving optimized resume to: {optimized_path}")
-        
-        with open(optimized_path, "w", encoding="utf-8") as f:
-            f.write(optimized_resume)
-        
-        file_size_kb = optimized_path.stat().st_size / 1024
+        try:
+            logger.debug(f"Saving backup to disk: {optimized_path}")
+            with open(optimized_path, "w", encoding="utf-8") as f:
+                f.write(optimized_resume_text)
+            file_size_kb = optimized_path.stat().st_size / 1024
+            logger.debug(f"✓ Backup saved to disk ({file_size_kb:.2f} KB)")
+        except Exception as e:
+            logger.warning(f"Failed to save backup to disk (non-critical): {str(e)}")
         
         duration = time.time() - start_time
         
@@ -96,14 +122,14 @@ async def generate_optimized_resume(request: OptimizeRequest):
         logger.info("✅ OPTIMIZED RESUME GENERATION COMPLETE")
         logger.info("=" * 80)
         logger.info(f"Analysis ID: {request.analysis_id}")
-        logger.info(f"Optimized resume size: {file_size_kb:.2f} KB")
+        logger.info(f"Optimized resume length: {len(optimized_resume_text)} chars")
         logger.info(f"Total duration: {duration:.2f}s")
         logger.info("=" * 80)
         
         response_data = {
             "message": "Optimized resume generated successfully!",
             "analysis_id": request.analysis_id,
-            "optimized_resume": optimized_resume,
+            "optimized_resume": optimized_resume_text,
             "download_url": f"/api/download-optimized-resume/{request.analysis_id}"
         }
         
@@ -121,6 +147,7 @@ async def generate_optimized_resume(request: OptimizeRequest):
     except HTTPException:
         raise
     except Exception as e:
+        db.rollback()
         duration = time.time() - start_time
         logger.error("=" * 80)
         logger.error("❌ OPTIMIZED RESUME GENERATION FAILED")
@@ -147,7 +174,7 @@ async def generate_optimized_resume(request: OptimizeRequest):
 
 
 @router.get("/api/download-optimized-resume/{analysis_id}")
-async def download_optimized_resume(analysis_id: str):
+async def download_optimized_resume(analysis_id: str, db: Session = Depends(get_db)):
     """
     Download optimized resume as PDF (converted from Markdown)
     
@@ -159,13 +186,17 @@ async def download_optimized_resume(analysis_id: str):
     """
     from fastapi.responses import FileResponse
     from utils.markdown_to_pdf import get_markdown_converter
+    from uuid import uuid4
     
     logger.info(f"📥 Download request for optimized resume PDF: {analysis_id}")
     
-    # Check if markdown resume exists
-    optimized_path = OPTIMIZED_DIR / f"{analysis_id}.txt"
+    # Get optimized resume from database
+    logger.debug(f"Looking for optimized resume in database: {analysis_id}")
+    optimized_resume = db.query(OptimizedResume).filter(
+        OptimizedResume.analysis_id == analysis_id
+    ).first()
     
-    if not optimized_path.exists():
+    if not optimized_resume:
         logger.warning(f"Optimized resume not found: {analysis_id}")
         raise HTTPException(
             status_code=404,
@@ -173,15 +204,36 @@ async def download_optimized_resume(analysis_id: str):
         )
     
     try:
-        # Read the markdown content
-        logger.debug(f"Reading markdown from: {optimized_path}")
-        with open(optimized_path, "r", encoding="utf-8") as f:
-            markdown_content = f.read()
+        # Get the markdown content from database
+        markdown_content = optimized_resume.content
+        logger.info(f"✓ Retrieved optimized resume from database ({len(markdown_content)} chars)")
         
         # Convert to PDF
         logger.info("Converting markdown to PDF...")
         converter = get_markdown_converter()
         pdf_path = converter.convert_to_pdf(markdown_content, f"optimized_resume_{analysis_id}")
+        
+        # Save report record to database
+        logger.info("Saving report record to database...")
+        report_id = str(uuid4())
+        report = Report(
+            id=report_id,
+            analysis_id=analysis_id,
+            file_path=str(pdf_path),
+            report_type="optimized_resume"
+        )
+        # Check if report already exists
+        existing_report = db.query(Report).filter(
+            Report.analysis_id == analysis_id,
+            Report.report_type == "optimized_resume"
+        ).first()
+        if existing_report:
+            existing_report.file_path = str(pdf_path)
+            logger.info("Updated existing report record")
+        else:
+            db.add(report)
+            logger.info("Created new report record")
+        db.commit()
         
         file_size_kb = pdf_path.stat().st_size / 1024
         logger.info(f"✓ Serving optimized resume PDF: {analysis_id} ({file_size_kb:.2f} KB)")
@@ -193,6 +245,7 @@ async def download_optimized_resume(analysis_id: str):
         )
     
     except Exception as e:
+        db.rollback()
         logger.error(f"Failed to generate PDF: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,

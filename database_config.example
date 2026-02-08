@@ -1,0 +1,17 @@
+# Database Configuration Example
+# Copy this to .env and update with your values
+
+# PostgreSQL connection string format: postgresql://username:password@host:port/database_name
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/resume_advisor
+
+# For SQLite (development only):
+# DATABASE_URL=sqlite:///./resume_advisor.db
+
+# OpenAI Configuration (if not already set)
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Application Settings
+DEBUG=True
+LOG_LEVEL=INFO
+
+

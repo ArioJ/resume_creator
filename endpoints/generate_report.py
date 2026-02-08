@@ -1,11 +1,15 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 import json
 from pathlib import Path
 import time
 
 # Import centralized logging
 from utils.logging_config import get_logger, log_api_request
+
+# Import database
+from utils.database import get_db, Analysis, Report
 
 from utils.pdf_generator import PDFReportGenerator
 
@@ -18,7 +22,7 @@ REPORTS_DIR = Path("reports")
 
 
 @router.post("/api/generate-report/{analysis_id}")
-async def generate_report(analysis_id: str):
+async def generate_report(analysis_id: str, db: Session = Depends(get_db)):
     """
     Generate PDF report for an analysis
     
@@ -35,24 +39,21 @@ async def generate_report(analysis_id: str):
     logger.info("=" * 80)
     logger.info(f"Analysis ID: {analysis_id}")
     
-    # Retrieve analysis data
-    analysis_path = ANALYSIS_DIR / f"{analysis_id}.json"
-    logger.debug(f"Looking for analysis at: {analysis_path}")
+    # Retrieve analysis from database
+    logger.debug(f"Looking for analysis in database: {analysis_id}")
+    analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
     
-    if not analysis_path.exists():
-        logger.warning(f"Analysis not found: {analysis_id}")
+    if not analysis:
+        logger.warning(f"Analysis not found in database: {analysis_id}")
         raise HTTPException(status_code=404, detail="Analysis not found")
     
     try:
-        logger.debug("Reading analysis data...")
-        with open(analysis_path, "r", encoding="utf-8") as f:
-            analysis_data = json.load(f)
-        
-        file_size_kb = analysis_path.stat().st_size / 1024
-        logger.info(f"✓ Analysis data loaded: {file_size_kb:.2f} KB")
+        logger.debug("Parsing analysis results...")
+        results = json.loads(analysis.results_json)
+        logger.info(f"✓ Analysis data loaded from database")
     except Exception as e:
-        logger.error(f"Failed to read analysis {analysis_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to read analysis data")
+        logger.error(f"Failed to parse analysis {analysis_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to parse analysis data")
     
     # Generate PDF
     try:
@@ -60,9 +61,28 @@ async def generate_report(analysis_id: str):
         generator = PDFReportGenerator()
         
         logger.info("Generating PDF report...")
-        pdf_path = generator.generate_report(analysis_data["results"], analysis_id)
+        pdf_path = generator.generate_report(results, analysis_id)
         
         pdf_size_kb = pdf_path.stat().st_size / 1024
+        
+        # Save report record to database
+        logger.info("Saving report record to database...")
+        report = Report(
+            id=analysis_id,  # Using analysis_id as report_id for simplicity
+            analysis_id=analysis_id,
+            file_path=str(pdf_path),
+            report_type="analysis"
+        )
+        # Check if report already exists
+        existing_report = db.query(Report).filter(Report.id == analysis_id).first()
+        if existing_report:
+            existing_report.file_path = str(pdf_path)
+            logger.info("Updated existing report record")
+        else:
+            db.add(report)
+            logger.info("Created new report record")
+        db.commit()
+        
         duration = time.time() - start_time
         
         logger.info("=" * 80)
@@ -91,6 +111,7 @@ async def generate_report(analysis_id: str):
         return response_data
     
     except Exception as e:
+        db.rollback()
         duration = time.time() - start_time
         logger.error("=" * 80)
         logger.error("❌ REPORT GENERATION FAILED")

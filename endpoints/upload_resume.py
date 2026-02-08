@@ -1,5 +1,6 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 from PyPDF2 import PdfReader
 import docx2txt
 import io, tempfile, os
@@ -9,6 +10,9 @@ import time
 
 # Import centralized logging
 from utils.logging_config import get_logger, log_api_request
+
+# Import database
+from utils.database import get_db, Resume
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -76,7 +80,7 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
 
 
 @router.post("/api/upload-resume")
-async def upload_resume(file: UploadFile = File(...)):
+async def upload_resume(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
     Upload and extract text from resume file (PDF, DOCX, TXT)
     
@@ -139,18 +143,35 @@ async def upload_resume(file: UploadFile = File(...)):
 
     # Create unique ID for this resume
     resume_id = str(uuid4())
-    txt_path = DATA_DIR / f"{resume_id}.txt"
     logger.info(f"Generated resume ID: {resume_id}")
-    logger.debug(f"Saving to: {txt_path}")
 
-    # Save text to disk
+    # Save to database
     try:
+        logger.info("Saving resume to database...")
+        resume = Resume(
+            id=resume_id,
+            filename=filename,
+            content=text,
+            file_size_bytes=len(file_bytes)
+        )
+        db.add(resume)
+        db.commit()
+        db.refresh(resume)
+        logger.info(f"✓ Resume saved to database: {resume_id}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to save resume to database: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save resume to database")
+    
+    # Also save text to disk for backward compatibility (optional)
+    txt_path = DATA_DIR / f"{resume_id}.txt"
+    try:
+        logger.debug(f"Saving backup to disk: {txt_path}")
         with open(txt_path, "w", encoding="utf-8") as f:
             f.write(text)
-        logger.info(f"✓ Resume saved to disk: {txt_path}")
+        logger.debug(f"✓ Backup saved to disk")
     except Exception as e:
-        logger.error(f"Failed to save resume to disk: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to save resume")
+        logger.warning(f"Failed to save backup to disk (non-critical): {str(e)}")
 
     duration = time.time() - start_time
     logger.info("=" * 80)

@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import json
 from pathlib import Path
@@ -8,6 +9,9 @@ import time
 
 # Import centralized logging
 from utils.logging_config import get_logger, log_api_request
+
+# Import database
+from utils.database import get_db, Resume, Analysis
 
 from utils.resume_analyzer import ResumeAnalyzer
 
@@ -27,7 +31,7 @@ class AnalysisRequest(BaseModel):
 
 
 @router.post("/api/analyze")
-async def analyze_resume(request: AnalysisRequest):
+async def analyze_resume(request: AnalysisRequest, db: Session = Depends(get_db)):
     """
     Analyze resume against job description
     
@@ -57,21 +61,16 @@ async def analyze_resume(request: AnalysisRequest):
     
     logger.info("✓ Input validation passed")
     
-    # Retrieve resume text
-    resume_path = DATA_DIR / f"{request.resume_id}.txt"
-    logger.debug(f"Looking for resume at: {resume_path}")
+    # Retrieve resume from database
+    logger.debug(f"Looking for resume in database: {request.resume_id}")
+    resume = db.query(Resume).filter(Resume.id == request.resume_id).first()
     
-    if not resume_path.exists():
-        logger.error(f"Resume not found: {request.resume_id}")
+    if not resume:
+        logger.error(f"Resume not found in database: {request.resume_id}")
         raise HTTPException(status_code=404, detail="Resume not found. Please upload the resume first.")
     
-    try:
-        logger.debug("Reading resume file...")
-        resume_text = resume_path.read_text(encoding="utf-8")
-        logger.info(f"✓ Resume loaded: {len(resume_text)} characters")
-    except Exception as e:
-        logger.error(f"Failed to read resume {request.resume_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to read resume file")
+    resume_text = resume.content
+    logger.info(f"✓ Resume loaded from database: {len(resume_text)} characters")
     
     # Perform analysis
     try:
@@ -85,22 +84,35 @@ async def analyze_resume(request: AnalysisRequest):
         analysis_id = str(uuid4())
         logger.info(f"Generated analysis ID: {analysis_id}")
         
-        # Store analysis results
-        analysis_data = {
-            "analysis_id": analysis_id,
-            "resume_id": request.resume_id,
-            "job_description": request.job_description,
-            "results": analysis_results
-        }
+        # Save to database
+        logger.info("Saving analysis to database...")
+        analysis = Analysis(
+            id=analysis_id,
+            resume_id=request.resume_id,
+            job_description=request.job_description,
+            overall_score=analysis_results.get('overall_score'),
+            results_json=json.dumps(analysis_results)
+        )
+        db.add(analysis)
+        db.commit()
+        db.refresh(analysis)
+        logger.info(f"✓ Analysis saved to database: {analysis_id}")
         
+        # Also save to disk for backward compatibility (optional)
         analysis_path = ANALYSIS_DIR / f"{analysis_id}.json"
-        logger.debug(f"Saving analysis to: {analysis_path}")
-        
-        with open(analysis_path, "w", encoding="utf-8") as f:
-            json.dump(analysis_data, f, indent=2)
-        
-        file_size_kb = analysis_path.stat().st_size / 1024
-        logger.info(f"✓ Analysis saved: {file_size_kb:.2f} KB")
+        try:
+            logger.debug(f"Saving backup to disk: {analysis_path}")
+            analysis_data = {
+                "analysis_id": analysis_id,
+                "resume_id": request.resume_id,
+                "job_description": request.job_description,
+                "results": analysis_results
+            }
+            with open(analysis_path, "w", encoding="utf-8") as f:
+                json.dump(analysis_data, f, indent=2)
+            logger.debug(f"✓ Backup saved to disk")
+        except Exception as e:
+            logger.warning(f"Failed to save backup to disk (non-critical): {str(e)}")
         
         duration = time.time() - start_time
         
@@ -131,6 +143,7 @@ async def analyze_resume(request: AnalysisRequest):
         return JSONResponse(response_data)
     
     except Exception as e:
+        db.rollback()
         duration = time.time() - start_time
         logger.error("=" * 80)
         logger.error("❌ RESUME ANALYSIS FAILED")
@@ -155,7 +168,7 @@ async def analyze_resume(request: AnalysisRequest):
 
 
 @router.get("/api/analysis/{analysis_id}")
-async def get_analysis(analysis_id: str):
+async def get_analysis(analysis_id: str, db: Session = Depends(get_db)):
     """
     Retrieve previously completed analysis
     
@@ -167,19 +180,25 @@ async def get_analysis(analysis_id: str):
     """
     logger.info(f"📊 Retrieving analysis: {analysis_id}")
     
-    analysis_path = ANALYSIS_DIR / f"{analysis_id}.json"
+    # Get from database
+    analysis = db.query(Analysis).filter(Analysis.id == analysis_id).first()
     
-    if not analysis_path.exists():
-        logger.warning(f"Analysis not found: {analysis_id}")
+    if not analysis:
+        logger.warning(f"Analysis not found in database: {analysis_id}")
         raise HTTPException(status_code=404, detail="Analysis not found")
     
     try:
-        logger.debug(f"Reading analysis from: {analysis_path}")
-        with open(analysis_path, "r", encoding="utf-8") as f:
-            analysis_data = json.load(f)
+        # Parse JSON results
+        results = json.loads(analysis.results_json)
         
-        file_size_kb = analysis_path.stat().st_size / 1024
-        logger.info(f"✓ Analysis retrieved: {analysis_id} ({file_size_kb:.2f} KB)")
+        analysis_data = {
+            "analysis_id": analysis.id,
+            "resume_id": analysis.resume_id,
+            "job_description": analysis.job_description,
+            "results": results
+        }
+        
+        logger.info(f"✓ Analysis retrieved from database: {analysis_id}")
         
         return JSONResponse(analysis_data)
     
